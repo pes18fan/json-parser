@@ -13,5 +13,5 @@ but I was just following a book. Do I really know how to implement lexing and
 parsing?" So I spent a few hours trying to do it. And thankfully, as it turns
 out, I can indeed do it.
 
-Unfortunately this isn't recursive descent yet, so it's not yet confirmed
-whether I can do that.
+Unfortunately this isn't recursive descent, so it's not confirmed whether
+I can do that. Yet.
