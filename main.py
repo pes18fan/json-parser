@@ -2,7 +2,6 @@ from typing import Dict, List
 from enum import Enum, auto
 from pprint import pprint
 import sys
-import logging
 
 
 class LexException(Exception):
