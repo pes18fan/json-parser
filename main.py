@@ -1,6 +1,16 @@
 from typing import Dict, List
 from enum import Enum, auto
 from pprint import pprint
+import sys
+import logging
+
+
+class LexException(Exception):
+    pass
+
+
+class ParseException(Exception):
+    pass
 
 
 class TokenType(Enum):
@@ -61,7 +71,7 @@ class Lexer:
             self.i += 1
 
         if self.is_at_end():
-            raise Exception("Unterminated string")
+            raise LexException("Unterminated string")
 
         self.i += 1     # consume the last "
         self.make_token(TokenType.STRING, "\"" + key + "\"")
@@ -70,7 +80,7 @@ class Lexer:
         key = ""
         while self.is_digit(self.source[self.i]):
             if self.is_at_end():
-                raise Exception("json input ended abruptly")
+                raise LexException("json input ended abruptly")
 
             key += self.source[self.i]
             self.i += 1
@@ -99,7 +109,7 @@ class Lexer:
             case _ if self.is_digit(char):
                 self.handle_number()
             case _:
-                raise Exception(f"Unexpected character: {char}")
+                raise LexException(f"Unexpected character: {char}")
 
     def lex(self) -> List[Token]:
         while self.i < len(self.source):
@@ -118,17 +128,17 @@ class Parser:
 
     def consume(self, expected: str):
         if self.is_at_end():
-            raise Exception("json input ended without \"}\"")
+            raise ParseException("json input ended without \"}\"")
 
         found = self.curr().lexeme
         if found != expected:
-            raise Exception(f"Expected {expected} but got {found}")
+            raise ParseException(f"Expected {expected} but got {found}")
 
         self.i += 1
 
     def match(self, expected: str) -> bool:
         if self.is_at_end():
-            raise Exception("json input ended without \"}\"")
+            raise ParseException("json input ended without \"}\"")
 
         found = self.curr().lexeme
         if found != expected:
@@ -151,13 +161,13 @@ class Parser:
 
     def key(self) -> str:
         if self.is_at_end():
-            raise Exception("Expected string")
+            raise ParseException("Expected string")
 
         curr = self.curr()
 
         # In json, only strings can be keys
         if curr.tok_type != TokenType.STRING:
-            raise Exception("Expected string")
+            raise ParseException("Expected string")
 
         key = curr.lexeme[1:-1]
         self.i += 1
@@ -165,7 +175,7 @@ class Parser:
 
     def value(self):
         if self.is_at_end():
-            raise Exception("Expected a value for the corresponding key")
+            raise ParseException("Expected a value for the corresponding key")
 
         value = 0
         curr = self.curr()
@@ -177,7 +187,7 @@ class Parser:
             case TokenType.NUMBER:
                 value = float(curr.lexeme)
             case _:
-                raise Exception("Expected string or number")
+                raise ParseException("Expected string or number")
 
         self.i += 1
         return value
@@ -211,7 +221,7 @@ class Parser:
 
             self.consume(",")
 
-        raise Exception("json input ended without \"}\"")
+        raise ParseException("json input ended without \"}\"")
 
     def parse(self) -> Dict[str, str | float]:
         self.json()
@@ -224,10 +234,20 @@ def main():
         json = input()
 
         lexer = Lexer(json)
-        tokens = lexer.lex()
+
+        try:
+            tokens = lexer.lex()
+        except LexException as e:
+            print(f"\033[31mlexer error:\033[0m {str(e)}", file=sys.stderr)
+            exit(1)
 
         parser = Parser(tokens)
-        result = parser.parse()
+
+        try:
+            result = parser.parse()
+        except ParseException as e:
+            print(f"\033[31mparse error:\033[0m {str(e)}", file=sys.stderr)
+            exit(1)
 
         pprint(result)
     except KeyboardInterrupt:
