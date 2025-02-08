@@ -4,6 +4,8 @@ from pprint import pprint
 
 
 class TokenType(Enum):
+    LSQUIRLY = auto()
+    RSQUIRLY = auto()
     COMMA = auto()
     COLON = auto()
     STRING = auto()
@@ -32,6 +34,9 @@ class Lexer:
     def is_digit(self, char: str) -> bool:
         return "0" <= char <= "9"
 
+    def is_at_end(self):
+        return self.i >= len(self.source)
+
     def consume_whitespace(self):
         while self.source[self.i] == " ":
             self.i += 1
@@ -44,11 +49,11 @@ class Lexer:
         key = ""
 
         # grab the string content
-        while self.i < len(self.source) and self.source[self.i] != "\"" :
+        while not self.is_at_end() and self.source[self.i] != "\"" :
             key += self.source[self.i]
             self.i += 1
 
-        if self.i >= len(self.source):
+        if self.is_at_end():
             raise Exception("Unterminated string")
 
         self.i += 1     # consume the last "
@@ -57,6 +62,9 @@ class Lexer:
     def handle_number(self):
         key = ""
         while self.is_digit(self.source[self.i]):
+            if self.is_at_end():
+                raise Exception("json input ended abrupty")
+
             key += self.source[self.i]
             self.i += 1
 
@@ -67,6 +75,12 @@ class Lexer:
 
         char = self.source[self.i]
         match char:
+            case "{":
+                self.make_token(TokenType.LSQUIRLY, "{")
+                self.i += 1
+            case "}":
+                self.make_token(TokenType.RSQUIRLY, "}")
+                self.i += 1
             case ",":
                 self.make_token(TokenType.COMMA, ",")
                 self.i += 1
@@ -81,17 +95,7 @@ class Lexer:
                 raise Exception(f"Unexpected character: {char}")
 
     def lex(self) -> List[Token]:
-        if len(self.source) == 0:
-            return
-
-        if self.source[self.i] != "{":
-            raise Exception("json must begin with \"{\"")
-        self.i += 1
-
-        while self.source[self.i] != "}":
-            if self.i >= len(self.source):
-                raise Exception("json must end with \"}\"")
-
+        while self.i < len(self.source):
             self.consume()
 
         return self.tokens
@@ -101,60 +105,96 @@ class Parser:
     def __init__(self, tokens: List[Token]):
         self.tokens = tokens
         self.i = 0
-        self.result: Dict[str, str | int] = {}
+        self.result: Dict[str, str | float] = {}
 
-    def handle_key_value(self):
-        key_token = self.tokens[self.i]
-        key = key_token.lexeme[1:-1]     # remove the quotes
+    def consume(self, expected: str):
+        if self.is_at_end():
+            raise Exception("json input ended abruptly")
 
-        self.i += 1     # consume the string token itself
-
-        if self.i >= len(self.tokens):
-            raise Exception("Invalid syntax")
-
-        if self.tokens[self.i].tok_type != TokenType.COLON:
-            raise Exception("Syntax error; need a colon after a key")
-
-        self.i += 1     # consume the colon
-
-        if self.i >= len(self.tokens):
-            raise Exception("Invalid syntax")
-
-        value_token = self.tokens[self.i]
-        match value_token.tok_type:
-            case TokenType.STRING:
-                value = value_token.lexeme[1:-1]
-                self.result[key] = value
-            case TokenType.NUMBER:
-                value = float(value_token.lexeme)
-                self.result[key] = value
-            case _:
-                raise Exception(f"Invalid value for the key \"{key}\"")
-
-        self.i += 1     # consume the value token
-
-        if self.i >= len(self.tokens) - 1:
-            return
-
-        if self.tokens[self.i].tok_type != TokenType.COMMA:
-            raise Exception(
-                "Syntax error; need a comma after a value unless at the end")
+        found = self.curr().lexeme
+        if found != expected:
+            raise Exception(f"Expected {expected} but got {found}")
 
         self.i += 1
 
-    def consume(self):
-        token = self.tokens[self.i]
+    def match(self, expected: str) -> bool:
+        if self.is_at_end():
+            raise Exception("json input ended abruptly")
 
-        match token.tok_type:
+        found = self.curr().lexeme
+        if found != expected:
+            return False
+
+        self.i += 1
+        return True
+
+    def is_at_end(self) -> bool:
+        return self.i >= len(self.tokens)
+
+    def curr(self) -> Token:
+        if self.is_at_end():
+            return None
+
+        return self.tokens[self.i]
+
+    def next(self) -> Token | None:
+        if self.i >= len(self.tokens) - 1:
+            return None
+
+        return self.tokens[self.i + 1]
+
+    def key(self) -> str:
+        curr = self.curr()
+        if curr is None or curr.tok_type != TokenType.STRING:
+            raise Exception("Expected string")
+
+        key = curr.lexeme[1:-1]
+        self.i += 1
+        return key
+
+    def value(self):
+        value = 0
+        curr = self.curr()
+
+        if curr is None:
+            raise Exception("Expected a value for the corresponding key")
+
+        match curr.tok_type:
             case TokenType.STRING:
-                self.handle_key_value()
+                value = curr.lexeme[1:-1]
+            case TokenType.NUMBER:
+                value = float(curr.lexeme)
             case _:
-                raise Exception(f"Unexpected character: {self.tokens[self.i]}")
-            # No need to handle NUMBER as it can never be a key
+                raise Exception("Expected string or number")
 
-    def parse(self) -> Dict[str, str | int]:
-        while self.i < len(self.tokens):
-            self.consume()
+        self.i += 1
+        return value
+
+    def pair(self):
+        key = self.key()
+        self.consume(":")
+        value = self.value()
+
+        self.result[key] = value
+
+    # for now assume that json enforces trailing commas
+    # reality: it doesn't even allow them
+    def json(self):
+        self.consume("{")
+
+        while True:
+            if self.match("}"):
+                break
+
+            self.pair()
+
+            if self.match("}"):
+                break
+
+            self.consume(",")
+
+    def parse(self) -> Dict[str, str | float]:
+        self.json()
 
         return self.result
 

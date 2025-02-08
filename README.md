@@ -13,5 +13,18 @@ but I was just following a book. Do I really know how to implement lexing and
 parsing?" So I spent a few hours trying to do it. And thankfully, as it turns
 out, I can indeed do it. Served as some good brain exercise too.
 
-Unfortunately this isn't recursive descent, so it's not confirmed whether
-I can do that. Yet.
+## (rather informal) ebnf grammar
+
+```ebnf
+json ->  "{" (pair ",")* pair "}"
+pair ->  key ":" value
+
+key   -> str
+value -> str | num
+
+str   -> "\"" CHAR* "\""
+num   -> DIGIT*
+
+DIGIT -> "0" - "9"
+CHAR  -> any unicode character
+```
