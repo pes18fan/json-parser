@@ -177,8 +177,6 @@ class Parser:
 
         self.result[key] = value
 
-    # for now assume that json enforces trailing commas
-    # reality: it doesn't even allow them
     def json(self):
         self.consume("{")
 
