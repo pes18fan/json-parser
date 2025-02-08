@@ -160,15 +160,18 @@ class Parser:
 
 
 def main():
-    json = input()
+    try:
+        json = input()
 
-    lexer = Lexer(json)
-    tokens = lexer.lex()
+        lexer = Lexer(json)
+        tokens = lexer.lex()
 
-    parser = Parser(tokens)
-    result = parser.parse()
+        parser = Parser(tokens)
+        result = parser.parse()
 
-    pprint(result)
+        pprint(result)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
