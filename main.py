@@ -10,8 +10,12 @@ class TokenType(Enum):
     COLON = auto()
     STRING = auto()
     NUMBER = auto()
+    EOF = auto()    # EOF just indicates the end of the token stream
 
 
+# Any discrete part of the language that can be considered a separate thing
+# in of itself. For example, it may be a keyword, an operator, or a string or
+# number, or punctuation like braces or semicolons.
 class Token:
     def __init__(self, tok_type: TokenType, lexeme: str):
         self.tok_type = tok_type
@@ -24,16 +28,19 @@ class Token:
         return f"(type: {self.tok_type}, lexeme: {self.lexeme})"
 
 
+# The lexer takes the input string and from that, gives you a list of tokens.
 class Lexer:
     def __init__(self, source: str):
-        self.source = source
-        self.i = 0
+        self.source = source    # The string which we're forming tokens out of
+        self.i = 0      # The index in the source where the lexer's at currently
         self.tokens: List[Token] = []
         pass
 
+    # Check if a character is a digit.
     def is_digit(self, char: str) -> bool:
         return "0" <= char <= "9"
 
+    # Check if we've reached the end.
     def is_at_end(self):
         return self.i >= len(self.source)
 
@@ -63,7 +70,7 @@ class Lexer:
         key = ""
         while self.is_digit(self.source[self.i]):
             if self.is_at_end():
-                raise Exception("json input ended abrupty")
+                raise Exception("json input ended abruptly")
 
             key += self.source[self.i]
             self.i += 1
@@ -98,6 +105,8 @@ class Lexer:
         while self.i < len(self.source):
             self.consume()
 
+        self.make_token(TokenType.EOF, "")
+
         return self.tokens
 
 
@@ -109,7 +118,7 @@ class Parser:
 
     def consume(self, expected: str):
         if self.is_at_end():
-            raise Exception("json input ended abruptly")
+            raise Exception("json input ended without \"}\"")
 
         found = self.curr().lexeme
         if found != expected:
@@ -119,7 +128,7 @@ class Parser:
 
     def match(self, expected: str) -> bool:
         if self.is_at_end():
-            raise Exception("json input ended abruptly")
+            raise Exception("json input ended without \"}\"")
 
         found = self.curr().lexeme
         if found != expected:
@@ -129,23 +138,25 @@ class Parser:
         return True
 
     def is_at_end(self) -> bool:
-        return self.i >= len(self.tokens)
+        return self.curr().tok_type == TokenType.EOF
 
     def curr(self) -> Token:
-        if self.is_at_end():
-            return None
-
         return self.tokens[self.i]
 
     def next(self) -> Token | None:
-        if self.i >= len(self.tokens) - 1:
+        if self.is_at_end():
             return None
 
         return self.tokens[self.i + 1]
 
     def key(self) -> str:
+        if self.is_at_end():
+            raise Exception("Expected string")
+
         curr = self.curr()
-        if curr is None or curr.tok_type != TokenType.STRING:
+
+        # In json, only strings can be keys
+        if curr.tok_type != TokenType.STRING:
             raise Exception("Expected string")
 
         key = curr.lexeme[1:-1]
@@ -153,12 +164,13 @@ class Parser:
         return key
 
     def value(self):
+        if self.is_at_end():
+            raise Exception("Expected a value for the corresponding key")
+
         value = 0
         curr = self.curr()
 
-        if curr is None:
-            raise Exception("Expected a value for the corresponding key")
-
+        # For now, only strings and numbers are supported by the parser
         match curr.tok_type:
             case TokenType.STRING:
                 value = curr.lexeme[1:-1]
@@ -175,21 +187,31 @@ class Parser:
         self.consume(":")
         value = self.value()
 
+        # After grabbing the key and value, set it in the result dict
         self.result[key] = value
 
     def json(self):
+        # Accept empty strings
+        if self.is_at_end():
+            return
+
         self.consume("{")
 
-        while True:
-            if self.match("}"):
-                break
+        # Accept {}
+        if self.match("}"):
+            return
 
+        # The structure of the while loop disallows trailing commas.
+        # This is because the json spec doesn't allow trailing commas itself.
+        while not self.is_at_end():
             self.pair()
 
             if self.match("}"):
-                break
+                return
 
             self.consume(",")
+
+        raise Exception("json input ended without \"}\"")
 
     def parse(self) -> Dict[str, str | float]:
         self.json()
