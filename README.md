@@ -1,6 +1,6 @@
 # json-parser
 
-Simple JSON parser in Python. Warning: code is extremely spaghetti.
+Simple parser for a JSON subset in Python. Warning: code is extremely spaghetti.
 
 ## but why?
 
